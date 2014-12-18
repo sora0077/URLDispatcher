@@ -148,15 +148,15 @@ extension URLDispatchClient {
     public func open() {
 
         if self.canOpen {
-            if let (f, options, node) = self.first {
-                let request = URLDispatchRequest(client: self, options: options, node: node)
-                self.dispatch(entry: f(request))
-            }
             if var gen = self.generator {
                 for (f, options, node) in gen {
                     let request = URLDispatchRequest(client: self, options: options, node: node)
                     self.dispatch(entry: f(request))
                 }
+            }
+            if let (f, options, node) = self.first {
+                let request = URLDispatchRequest(client: self, options: options, node: node)
+                self.dispatch(entry: f(request), callback: true)
             }
             self.generator = nil
         }
@@ -166,7 +166,7 @@ extension URLDispatchClient {
 extension URLDispatchClient {
 
     //MARK: private
-    private func dispatch(#entry: URLDispatchEntry) {
+    private func dispatch(#entry: URLDispatchEntry, callback: Bool = false) {
 
         switch entry {
         case let .Immediate(dispatched):
@@ -174,14 +174,14 @@ extension URLDispatchClient {
                 assert((vc as AnyObject as? UIViewController) != nil, "URLViewDispatched object expects UIViewController object")
 
                 vc.dispatchEvent(fromViewController: URLDispatchRouter.presentingViewController, completion: {
-                    self.callback?.open()
+                    if callback { self.callback?.open() }
                     return
                 })
                 let vc = vc as AnyObject as UIViewController
                 URLDispatchRouter.presentingViewController = vc
             } else if let d = dispatched as? URLEventDispatched {
                 d.dispatchEvent({
-                    self.callback?.open()
+                    if callback { self.callback?.open() }
                     return
                 })
             }
@@ -190,7 +190,7 @@ extension URLDispatchClient {
                 self.dispatch(entry: entry)
             }
         case .None:
-            self.callback?.open()
+            if callback { self.callback?.open() }
         }
     }
 }
@@ -340,9 +340,7 @@ extension URLDispatchRouter {
                 return .Failure
             }
             if c[c.startIndex] == _URLDispatch.PATTERN_PREFIX {
-                if options == nil {
-                    options = [:]
-                }
+                if options == nil { options = [:] }
                 options?[c[advance(c.startIndex, 1)..<c.endIndex]] = target[level]
                 return self.lookupNode(n(), target: target, options: &options, level: level + 1)
             }

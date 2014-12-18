@@ -31,7 +31,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             println((request.url, request.options))
             return .None
         }
-        URLDispatcher(scheme: "app").dispatch(pattern: "/users/test/view") { (request) -> URLDispatchEntry in
+        URLDispatcher(scheme: "app").dispatch(pattern: "/users/test/:view") { (request) -> URLDispatchEntry in
 
             println((request.url, request.options))
             return .None
