@@ -50,7 +50,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             })
         }
 
-        let c = URLDispatchClient(string: "app:///users/test/6666?z-callback=app%3a%2f%2f%2fusers%2ftest%2f8888")
+        let c = URLDispatchClient(string: "app:///users/test/4444?z-callback=app%3a%2f%2f%2fusers%2ftest%2f6666%3fz%2dcallback%3dapp%253a%252f%252f%252fusers%252ftest%252f8888&param=22")
 //        let c = URLDispatchClient(string: "aaa:///")
         c.open()
 //        c.open()

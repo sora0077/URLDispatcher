@@ -91,7 +91,6 @@ public struct _URLDispatch {
 
     public class Router {
 
-        private typealias PatternMatcher = ((URLDispatchRequest) -> URLDispatchEntry, [String: String]?, Node)
 
         private var callbackKey: String = CALLBACK_KEY
 
@@ -114,26 +113,6 @@ extension URLDispatchRequest {
 }
 
 extension URLDispatchClient {
-
-    private class func parseURLString(string: String) -> (NSURL, NSURL?) {
-        let components = NSURLComponents(string: string)!
-
-        var callbackURL: NSURL?
-
-        if let items = components.queryItems as? [NSURLQueryItem] {
-            var queryItems = [NSURLQueryItem]()
-            for item in items {
-                if item.name == _URLDispatch.CALLBACK_KEY && item.value != nil {
-                    callbackURL = NSURL(string: item.value!)
-                } else {
-                    queryItems.append(item)
-                }
-            }
-            components.queryItems = queryItems
-        }
-
-        return (components.URL!, callbackURL)
-    }
 
     public convenience init(url: NSURL) {
         let ret = URLDispatchClient.parseURLString(url.absoluteString!)
@@ -182,7 +161,11 @@ extension URLDispatchClient {
             self.generator = nil
         }
     }
+}
 
+extension URLDispatchClient {
+
+    //MARK: private
     private func dispatch(#entry: URLDispatchEntry) {
 
         switch entry {
@@ -212,9 +195,35 @@ extension URLDispatchClient {
     }
 }
 
+extension URLDispatchClient {
+
+    //MARK: utility
+    private class func parseURLString(string: String) -> (NSURL, NSURL?) {
+        let components = NSURLComponents(string: string)!
+
+        var callbackURL: NSURL?
+
+        if let items = components.queryItems as? [NSURLQueryItem] {
+            var queryItems = [NSURLQueryItem]()
+            for item in items {
+                if item.name == _URLDispatch.CALLBACK_KEY && item.value != nil {
+                    callbackURL = NSURL(string: item.value!)
+                } else {
+                    queryItems.append(item)
+                }
+            }
+            components.queryItems = queryItems
+        }
+
+        return (components.URL!, callbackURL)
+    }
+}
+
 extension URLDispatchRouter {
 
+    //MARK: definition
     private typealias DispatchProcess = (URLDispatchRequest) -> URLDispatchEntry
+    private typealias PatternMatcher = (DispatchProcess, [String: String]?, Node)
 
     private struct Static {
         static weak var presentingViewController: UIViewController!
@@ -239,8 +248,28 @@ extension URLDispatchRouter {
         case Success(DispatchProcess)
         case Failure
     }
+}
 
 
+extension URLDispatchRouter {
+
+    public func test(#pattern: String) -> Bool {
+
+        for _ in self.match(pattern: pattern) {
+            return true
+        }
+        return false
+    }
+
+    public func dispatch(#pattern: String, _ block: (request: URLDispatchRequest) -> URLDispatchEntry) {
+
+        self.addPattern(pattern, block: block)
+    }
+}
+
+extension URLDispatchRouter {
+
+    //MARK: private
     private class func scheme(scheme: String) -> URLDispatchRouter {
 
         if let d = Static.routers[scheme] {
@@ -277,14 +306,6 @@ extension URLDispatchRouter {
         }
 
         self.patterns[components.count]!.append(node)
-    }
-
-    public func test(#pattern: String) -> Bool {
-
-        for _ in self.match(pattern: pattern) {
-            return true
-        }
-        return false
     }
 
     private func match(#pattern: String) -> GeneratorOf<PatternMatcher> {
@@ -334,10 +355,6 @@ extension URLDispatchRouter {
         return .Failure
     }
 
-    public func dispatch(#pattern: String, _ block: (request: URLDispatchRequest) -> URLDispatchEntry) {
-
-        self.addPattern(pattern, block: block)
-    }
 }
 
 extension URLDispatchRouter.Node: DebugPrintable {
