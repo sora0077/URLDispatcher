@@ -8,7 +8,6 @@
 
 import Foundation
 import UIKit
-import JavaScriptCore
 
 public typealias URLDispatchEntry = _URLDispatch.Entry
 public typealias URLDispatchRouter = _URLDispatch.Router
@@ -56,10 +55,12 @@ public struct _URLDispatch {
 
     public struct Request {
 
+        private static let emptyOptions: [String: String] = [:]
+
         private let client: Client
         private let node: Router.Node   //future use
 
-        public let options: [String: String]?
+        public let options: [String: String]
 
         private init() {
             fatalError("")
@@ -67,7 +68,7 @@ public struct _URLDispatch {
 
         private init(client: Client, options: [String: String]?, node: Router.Node) {
             self.client = client
-            self.options = options
+            self.options = options ?? Request.emptyOptions
             self.node = node
         }
     }
@@ -186,7 +187,7 @@ extension URLDispatchClient {
                 })
             }
         case let .Future(block):
-            block { (entry) -> Void in
+            block { (entry) in
                 self.dispatch(entry: entry)
             }
         case .None:
@@ -366,3 +367,5 @@ extension URLDispatchRouter.Node: DebugPrintable {
         }
     }
 }
+
+

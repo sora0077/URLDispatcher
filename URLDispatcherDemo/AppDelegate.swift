@@ -25,7 +25,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
         // Override point for customization after application launch.
 
-
         URLDispatcher(scheme: "app").dispatch(pattern: "/:users/:test/:view") { (request) -> URLDispatchEntry in
 
             println((request.url, request.options))
@@ -47,6 +46,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             return .Future({ (done) in
 
                 done(.None)
+                
             })
         }
 
