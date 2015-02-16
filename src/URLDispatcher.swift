@@ -32,6 +32,117 @@ public func URLDispatcher(#scheme: String, block: URLDispatchRouter -> Void) {
     block(URLDispatchRouter.scheme(scheme))
 }
 
+
+/**
+*
+*/
+private var UIViewController_dispatched: UInt8 = 0
+extension UIViewController {
+    
+    public var dispatched: URLDispatched? {
+        get {
+            return objc_getAssociatedObject(self, &UIViewController_dispatched) as? URLDispatched
+        }
+        set {
+            objc_setAssociatedObject(self, &UIViewController_dispatched, newValue, objc_AssociationPolicy(OBJC_ASSOCIATION_RETAIN_NONATOMIC))
+        }
+    }
+    
+}
+
+private func traverseViewController(router: URLDispatchRouter? = nil) -> UIViewController? {
+    
+    let window = URLDispatchRouter.window
+    let block = URLDispatchRouter.optionalTraverseViewController
+    let viewController = window?.rootViewController
+    
+    return recursive_traverseViewController(viewController, block)
+}
+
+private func recursive_traverseViewController(vc: UIViewController?, block: (UIViewController? -> (Bool, UIViewController?))?) -> UIViewController? {
+    
+    if let nav = vc as? UINavigationController {
+        return recursive_traverseViewController(nav.visibleViewController, block)
+    }
+    if let tab = vc as? UITabBarController {
+        return recursive_traverseViewController(tab.selectedViewController, block)
+    }
+    if let vc = vc?.presentedViewController {
+        return recursive_traverseViewController(vc, block)
+    }
+    if let block = block {
+        let ret = block(vc)
+        if ret.0 {
+            if let vc = ret.1 {
+                return recursive_traverseViewController(vc, block)
+            }
+        }
+    }
+    
+    return vc
+}
+
+enum ViewControllerType {
+    
+    case Navigation(UINavigationController)
+    case TabBar(UITabBarController)
+    case Custom(UIViewController)
+    case Modal(UIViewController)
+}
+
+
+func dispatched_treeViewController(router: URLDispatchRouter? = nil) -> [UIViewController] {
+    
+    var tree: [UIViewController] = []
+    
+    let window = URLDispatchRouter.window
+    let block = URLDispatchRouter.optionalTraverseViewController
+    if let viewController = window?.rootViewController {
+        recursive_dispatched_treeViewController(viewController, nil, &tree)
+    }
+    
+    return tree
+}
+
+func recursive_dispatched_treeViewController(vc: UIViewController?, block: (UIViewController? -> (Bool, UIViewController?))?, inout tree: [UIViewController]) {
+    
+    if let nav = vc as? UINavigationController {
+        tree.append(nav)
+        
+        //NOTE: モーダルではない場合、スタックをtreeに含める
+        if nav.visibleViewController == nav.topViewController {
+            for vc in nav.viewControllers as [UIViewController] {
+                tree.append(vc)
+            }
+        }
+        return recursive_dispatched_treeViewController(nav.visibleViewController, block, &tree)
+    }
+    if let tab = vc as? UITabBarController {
+        tree.append(tab)
+        return recursive_dispatched_treeViewController(tab.selectedViewController, block, &tree)
+    }
+    if let vc = vc?.presentedViewController {
+        tree.append(vc)
+        return recursive_dispatched_treeViewController(vc, block, &tree)
+    }
+    if let block = block {
+        let ret = block(vc)
+        if ret.0 {
+            if let vc = ret.1 {
+                tree.append(vc)
+                return recursive_dispatched_treeViewController(vc, block, &tree)
+            }
+        }
+    }
+    
+    if let vc = vc {
+        if tree.last != vc {
+            tree.append(vc)
+        }
+    }
+    
+}
+
 /**
 *
 */
@@ -52,6 +163,9 @@ public protocol URLEventDispatched: URLDispatched {
     func dispatchEvent(completion: () -> Void)
 }
 
+
+var defaultWindow: UIWindow?
+var defaultOptionalTraverseViewController: (UIViewController? -> (Bool, UIViewController?))?
 
 public struct _URLDispatch {
     private static let PATTERN_PREFIX: Character = ":"
@@ -91,6 +205,8 @@ public struct _URLDispatch {
 
         private var generator: GeneratorOf<Router.PatternMatcher>?
         private var first: Router.PatternMatcher?
+        
+        private weak var router: URLDispatchRouter?
 
         public init(url: NSURL, callback: NSURL?) {
             self.url = url
@@ -101,14 +217,39 @@ public struct _URLDispatch {
     }
 
     public class Router {
-
+        
+        private class var window: UIWindow? {
+            get {
+                return defaultWindow
+            }
+            set {
+                defaultWindow = newValue
+            }
+        }
+        
+        private class var optionalTraverseViewController: (UIViewController? -> (Bool, UIViewController?))? {
+            get {
+                return defaultOptionalTraverseViewController
+            }
+            set {
+                defaultOptionalTraverseViewController = newValue
+            }
+        }
+        
+        private var additionalTraverseUIViewController: (UIViewController? -> (Bool, UIViewController?))?
 
         private var callbackKey: String = CALLBACK_KEY
 
         private var patterns: [Int: [Node]] = [:]
+        
+        private var dispatchStack: [URLDispatched] = []
 
         private init() {}
 
+        public class func startup(#window: UIWindow?, optionalTraverseViewController: (UIViewController? -> (Bool, UIViewController?))? = nil) {
+            self.window = window
+            self.optionalTraverseViewController = optionalTraverseViewController
+        }
     }
 }
 
@@ -145,6 +286,7 @@ extension URLDispatchClient {
             switch (self.url.scheme, path: self.url.path) {
             case let (.Some(host), .Some(path)):
                 let r = URLDispatcher(scheme: host)
+                self.router = r
                 self.generator = r.match(pattern: path)
             default:
                 break
@@ -181,6 +323,8 @@ extension URLDispatchClient {
 
         switch entry {
         case let .Immediate(dispatched):
+            
+            self.router?.dispatchStack.append(dispatched)
             if let vc = dispatched as? URLViewDispatched {
                 assert((vc as AnyObject as? UIViewController) != nil, "URLViewDispatched object expects UIViewController object")
 
@@ -230,6 +374,15 @@ extension URLDispatchClient {
     }
 }
 
+final class Box<T> {
+    
+    let unbox: T
+    
+    init(_ v: T) {
+        self.unbox = v
+    }
+}
+
 extension URLDispatchRouter {
 
     //MARK: definition
@@ -247,11 +400,10 @@ extension URLDispatchRouter {
 
     private enum Node {
         case Leaf(DispatchProcess)
-        case Child(String, @autoclosure () -> Node)
+        case Child(String, Box<Node>)
 
         init(_ v: String,  _ node: Node) {
-            let node = node
-            self = .Child(v, node)
+            self = .Child(v, Box(node))
         }
     }
 
@@ -353,10 +505,10 @@ extension URLDispatchRouter {
             if c[c.startIndex] == _URLDispatch.PATTERN_PREFIX {
                 if options == nil { options = [:] }
                 options?[c[advance(c.startIndex, 1)..<c.endIndex]] = target[level]
-                return self.lookupNode(n(), target: target, options: &options, level: level + 1)
+                return self.lookupNode(n.unbox, target: target, options: &options, level: level + 1)
             }
             if c == target[level] {
-                return self.lookupNode(n(), target: target, options: &options, level: level + 1)
+                return self.lookupNode(n.unbox, target: target, options: &options, level: level + 1)
             }
         case let .Leaf(block):
             return .Success(block)
@@ -373,7 +525,7 @@ extension URLDispatchRouter.Node: DebugPrintable {
         case .Leaf:
             return "(Leaf)"
         case let .Child(k, n):
-            return k + " -> " + n().debugDescription
+            return k + " -> " + n.unbox.debugDescription
         }
     }
 }

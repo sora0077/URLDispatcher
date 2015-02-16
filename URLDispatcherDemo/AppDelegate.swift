@@ -9,11 +9,13 @@
 import UIKit
 import URLDispatcher
 
+
 extension UIViewController: URLViewDispatched {
 
     public func dispatchEvent(fromViewController from: UIViewController, completion: () -> Void) {
 
     }
+    
 }
 
 @UIApplicationMain
@@ -24,6 +26,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: [NSObject: AnyObject]?) -> Bool {
         // Override point for customization after application launch.
+        
+        URLDispatchRouter.startup(window: self.window, optionalTraverseViewController: nil)
 
         URLDispatcher(scheme: "app").dispatch(pattern: "/:users/:test/:view") { (request) -> URLDispatchEntry in
 
@@ -43,9 +47,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         URLDispatcher(scheme: "app").dispatch(pattern: "/") { (request) -> URLDispatchEntry in
 
             println((request.url, request.options))
-            return .Future({ (done) in
+            return .Future({ (resolve) in
 
-                done(.None)
+                resolve(.None)
                 
             })
         }
