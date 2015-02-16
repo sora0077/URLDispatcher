@@ -14,12 +14,22 @@ public typealias URLDispatchRouter = _URLDispatch.Router
 public typealias URLDispatchClient = _URLDispatch.Client
 public typealias URLDispatchRequest = _URLDispatch.Request
 
+@availability(*, deprecated=1.0, message="Use func URLDispatcher(block: URLDispatcher.URLDispatchRouter -> Void)")
 public func URLDispatcher() -> URLDispatchRouter {
     return URLDispatchRouter.Static.instance
 }
 
+@availability(*, deprecated=1.0, message="Use func URLDispatcher(#scheme: String, block: URLDispatcher.URLDispatchRouter -> Void)")
 public func URLDispatcher(#scheme: String) -> URLDispatchRouter {
     return URLDispatchRouter.scheme(scheme)
+}
+
+public func URLDispatcher(block: URLDispatchRouter -> Void) {
+    block(URLDispatchRouter.Static.instance)
+}
+
+public func URLDispatcher(#scheme: String, block: URLDispatchRouter -> Void) {
+    block(URLDispatchRouter.scheme(scheme))
 }
 
 /**
